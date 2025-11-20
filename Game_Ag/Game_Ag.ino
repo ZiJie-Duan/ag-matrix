@@ -8,6 +8,8 @@ IMUdata game;
 
 // 声明 WiFi 连接函数 (在 Connect_Wifi.ino 中定义)
 void ConnectToWifi();
+// 声明离线画廊模式函数 (在 Connect_Wifi.ino 中定义)
+void OfflineGalleryLoop();
 
 void setup()
 {
@@ -28,6 +30,11 @@ const float Z_RAISED_THRESHOLD = -0.3;   // z轴抬高阈值（正常是-1.0左�
 const float Z_NORMAL_THRESHOLD = -0.9;   // z轴降低阈值（需要从抬高状态降低约0.6）
 const float XY_STABLE_THRESHOLD = 0.4;   // x和y轴的稳定阈值（绝对值小于此值视为稳定，调高以降低速度要求）
 
+// 静止检测变量
+unsigned long lastMotionTime = 0;      // 上次检测到运动的时间
+const unsigned long INACTIVITY_TIMEOUT = 5000; // 5秒静止进入离线画廊模式
+const float MOTION_THRESHOLD = 0.15;   // 运动检测阈值 (与下方游戏控制阈值一致)
+
 void loop()
 {
   QMI8658_Loop();
@@ -35,18 +42,21 @@ void loop()
   // 检测快速冲击（任意方向的强烈加速度）
   float totalAccel = sqrt(Accel.x * Accel.x + Accel.y * Accel.y + (Accel.z + 1.0) * (Accel.z + 1.0));
   if(totalAccel > IMPACT_THRESHOLD) {
-    // 触发或延长分裂模式（即使已在分裂模式中也会更新冲击时间）
+    // 触发或延长分裂模式（即使已在分裂模式中也会更新冲击时间） 
     TriggerSplitMode();
     extern bool miniGameEnabled;
     miniGameEnabled = false;  // 关闭小游戏
     
     // 重置Z轴手势状态，确保分裂模式结束后回到默认模式，而不是误触发Z轴手势
     zAxisRaised = false;
+    // 重置静止计时器
+    lastMotionTime = millis();
   }
   
   // 如果在分裂模式中，更新分裂效果
   if(IsSplitModeActive()) {
     UpdateSplitMode();
+    lastMotionTime = millis(); // 分裂模式不算静止
     delay(10);
     return;  // 分裂模式下不执行正常游戏逻辑
   }
@@ -73,6 +83,8 @@ void loop()
         // 手势完成，进入 WIFI 连接和后端交互模式
         zAxisRaised = false;
         ConnectToWifi(); // 这是一个阻塞调用，会接管控制权直到被打断
+        // 退出 wifi 模式后，重置静止计时器
+        lastMotionTime = millis(); 
       } else if(elapsed > Z_GESTURE_TIMEOUT) {
         // 超时，重置
         zAxisRaised = false;
@@ -88,6 +100,24 @@ void loop()
   
   // 更新点收集小游戏（永远运行）
   UpdateMiniGame();
+
+  // 检测是否有明显运动以更新静止计时器
+  bool isMoving = (std::abs(Accel.x) > MOTION_THRESHOLD || 
+                   std::abs(Accel.y) > MOTION_THRESHOLD || 
+                   std::abs(Accel.z + 1.0) > 0.2); // Z轴稍微宽松一点
+
+  if (isMoving) {
+    lastMotionTime = millis();
+  }
+
+  // 检查静止超时 -> 进入离线画廊模式
+  // 只有在没有 Z 轴手势进行中、没有分裂模式、小游戏启用(即默认状态)时才进入
+  if (!zAxisRaised && !miniGameEnabled && (millis() - lastMotionTime > INACTIVITY_TIMEOUT)) {
+     // 进入离线画廊模式（阻塞循环，直到快速冲击退出）
+     OfflineGalleryLoop();
+     // 退出后重置计时器
+     lastMotionTime = millis();
+  }
   
   // 只有在非分裂模式才响应倾斜控制 (Removed fullScreenMode check)
   if(!IsSplitModeActive() && (Accel.x > 0.15 || Accel.x < 0  || Accel.y > 0.15 || Accel.y < 0  || Accel.z > -0.9 || Accel.z < -1.1)){

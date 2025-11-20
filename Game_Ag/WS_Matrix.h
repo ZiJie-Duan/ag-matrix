@@ -8,6 +8,16 @@
 #define RGB_COUNT         64     
 #define MAX_PARTICLES     8      // 最大分裂粒子数
 
+// 存储画板数据结构体
+struct ArtworkSlot {
+  uint32_t grid[64]; // 8x8 flat array
+  bool isEmpty;      // 标记是否为空
+};
+
+// 全局共享画板数据
+extern ArtworkSlot artworks[10];
+extern bool hasData;
+
 // 粒子结构体
 struct Particle {
   float x, y;           // 位置（使用浮点数以实现平滑移动）
@@ -65,4 +75,10 @@ void SpawnNewTarget();                     // 生成新目标点
 
 // 游戏状态标志
 extern bool miniGameEnabled;               // 小游戏是否启用
+
+// 声明显示函数，供不同模式复用
+void displayArtwork(int slotIndex);
+// 声明离线画廊模式循环
+void OfflineGalleryLoop();
+
 #endif
