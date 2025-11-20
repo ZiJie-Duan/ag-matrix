@@ -13,7 +13,7 @@ void setup()
 {
   QMI8658_Init();
   Matrix_Init();
-  ConnectToWifi(); // 尝试连接 WiFi
+  // 初始化不再连接WiFi，改为手势触发
 }
 
 
@@ -53,8 +53,8 @@ void loop()
   
   // z轴手势检测（只在默认模式中）
   extern bool miniGameEnabled;
-  extern bool fullScreenMode;
-  if(!miniGameEnabled && !fullScreenMode) {
+  // Removed fullScreenMode check
+  if(!miniGameEnabled) {
     // 检查x和y轴是否稳定（接近水平）
     bool xyStable = (std::abs(Accel.x) < XY_STABLE_THRESHOLD && 
                      std::abs(Accel.y) < XY_STABLE_THRESHOLD);
@@ -70,9 +70,9 @@ void loop()
       unsigned long elapsed = millis() - zAxisRaisedTime;
       
       if(Accel.z < Z_NORMAL_THRESHOLD && elapsed <= Z_GESTURE_TIMEOUT && xyStable) {
-        // 手势完成，激活全屏模式
-        fullScreenMode = true;
+        // 手势完成，进入 WIFI 连接和后端交互模式
         zAxisRaised = false;
+        ConnectToWifi(); // 这是一个阻塞调用，会接管控制权直到被打断
       } else if(elapsed > Z_GESTURE_TIMEOUT) {
         // 超时，重置
         zAxisRaised = false;
@@ -89,8 +89,8 @@ void loop()
   // 更新点收集小游戏（永远运行）
   UpdateMiniGame();
   
-  // 只有在非分裂模式和非全屏模式下才响应倾斜控制
-  if(!IsSplitModeActive() && !fullScreenMode && (Accel.x > 0.15 || Accel.x < 0  || Accel.y > 0.15 || Accel.y < 0  || Accel.z > -0.9 || Accel.z < -1.1)){
+  // 只有在非分裂模式才响应倾斜控制 (Removed fullScreenMode check)
+  if(!IsSplitModeActive() && (Accel.x > 0.15 || Accel.x < 0  || Accel.y > 0.15 || Accel.y < 0  || Accel.z > -0.9 || Accel.z < -1.1)){
     if(Accel.x > 0.15){
       Time_X_A = Time_X_A + Accel.x * 10;
       Time_X_B = 0;

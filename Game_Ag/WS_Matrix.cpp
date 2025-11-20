@@ -28,7 +28,6 @@ const float GRAVITY_FORCE = 0.08;               // 倾斜重力影响系数
 
 // 游戏状态标志
 bool miniGameEnabled = false;                   // 小游戏是否启用
-bool fullScreenMode = false;                    // 全屏亮起模式是否激活
 
 // 点收集游戏相关变量
 TargetPoint target;
@@ -42,16 +41,6 @@ bool isTouching = false;                        // 是否正在触碰目标
 float touchBrightness = 0.0;                    // 触碰时的亮度增强 
 
 void RGB_Matrix() {
-  // 全屏亮起模式渲染（优先级最高）
-  if(fullScreenMode) {
-    // 所有像素点亮20%亮度（白色）
-    for(int i = 0; i < RGB_COUNT; i++) {
-      pixels.setPixelColor(i, pixels.Color(51, 51, 51));  // 255 * 0.2 = 51
-    }
-    pixels.show();
-    return;  // 全屏模式直接返回，不执行后续渲染
-  }
-  
   for (int row = 0; row < Matrix_Row; row++) {
     for (int col = 0; col < Matrix_Col; col++) {
       int pixelIndex = row * 8 + col;
@@ -231,7 +220,6 @@ void Matrix_Init() {
   
   // 初始化游戏状态
   miniGameEnabled = false;
-  fullScreenMode = false;
   
   // 初始化点收集游戏变量
   target.active = false;
@@ -265,9 +253,6 @@ void TriggerSplitMode() {
   
   // 记录当前是否在游戏中
   splitTriggeredFromGame = miniGameEnabled;
-  
-  // 分裂模式会打断所有其他模式
-  fullScreenMode = false;
   
   // 随机选择一个粒子作为聚拢目标
   targetParticleIndex = random(0, MAX_PARTICLES);

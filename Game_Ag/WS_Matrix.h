@@ -65,5 +65,4 @@ void SpawnNewTarget();                     // 生成新目标点
 
 // 游戏状态标志
 extern bool miniGameEnabled;               // 小游戏是否启用
-extern bool fullScreenMode;                // 全屏亮起模式是否激活
 #endif
