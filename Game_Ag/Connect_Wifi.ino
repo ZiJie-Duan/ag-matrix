@@ -204,9 +204,15 @@ void GalleryInteractionLoop(bool isWifiMode) {
   
   displayArtwork(currentSlot);
 
-  unsigned long lastTiltTime = 0;
-  const unsigned long TILT_COOLDOWN = 500; 
-  const float TILT_THRESHOLD = 0.3;
+  // 切换逻辑变量
+  unsigned long lastFlipTime = 0;
+  const unsigned long FLIP_COOLDOWN = 500; 
+  const float FLICK_THRESHOLD = 0.3; // 动作阈值 (差异值)
+  
+  // 使用低通滤波来检测"快速运动" (High Pass Filter logic)
+  // diff = current - smoothed
+  float smoothedAccelX = Accel.x;
+  const float alpha = 0.1; // 滤波系数
 
   while (true) {
     QMI8658_Loop();
@@ -223,21 +229,26 @@ void GalleryInteractionLoop(bool isWifiMode) {
       return; 
     }
     
-    // 倾斜切换逻辑 (改为 X 轴)
-    if (millis() - lastTiltTime > TILT_COOLDOWN) {
-      // Accel.x > 阈值 => 向下倾斜 (或根据实际方向) => 下一张
-      // Accel.x < -阈值 => 向上倾斜 => 上一张
+    // 更新平滑值
+    smoothedAccelX = smoothedAccelX * (1.0 - alpha) + Accel.x * alpha;
+    // 计算高频分量 (运动分量)
+    float diffX = Accel.x - smoothedAccelX;
+    
+    // 基于 X 轴运动的切换逻辑
+    if (millis() - lastFlipTime > FLIP_COOLDOWN) {
+      // diffX > 阈值 => 快速正向运动 => 下一张
+      // diffX < -阈值 => 快速负向运动 => 上一张
       
-      if (Accel.x > TILT_THRESHOLD) {
+      if (diffX > FLICK_THRESHOLD) {
         // 下一张
         currentSlot = getNextValidSlot(currentSlot, 1);
         displayArtwork(currentSlot);
-        lastTiltTime = millis();
-      } else if (Accel.x < -TILT_THRESHOLD) {
+        lastFlipTime = millis();
+      } else if (diffX < -FLICK_THRESHOLD) {
         // 上一张
         currentSlot = getNextValidSlot(currentSlot, -1);
         displayArtwork(currentSlot);
-        lastTiltTime = millis();
+        lastFlipTime = millis();
       }
     }
     

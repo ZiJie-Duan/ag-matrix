@@ -33,7 +33,8 @@ const float XY_STABLE_THRESHOLD = 0.4;   // x和y轴的稳定阈值（绝对值�
 // 静止检测变量
 unsigned long lastMotionTime = 0;      // 上次检测到运动的时间
 const unsigned long INACTIVITY_TIMEOUT = 5000; // 5秒静止进入离线画廊模式
-const float MOTION_THRESHOLD = 0.15;   // 运动检测阈值 (与下方游戏控制阈值一致)
+const float STILL_TOLERANCE = 0.10;    // 静止容差 (允许的加速度波动范围)
+float snapshotAccelX = 0, snapshotAccelY = 0, snapshotAccelZ = 0;
 
 void loop()
 {
@@ -102,12 +103,17 @@ void loop()
   UpdateMiniGame();
 
   // 检测是否有明显运动以更新静止计时器
-  bool isMoving = (std::abs(Accel.x) > MOTION_THRESHOLD || 
-                   std::abs(Accel.y) > MOTION_THRESHOLD || 
-                   std::abs(Accel.z + 1.0) > 0.2); // Z轴稍微宽松一点
+  // 逻辑：比较当前加速度与"快照"的偏差。如果偏差超过容差，说明发生了移动，重置计时器和快照。
+  // 这能有效处理倾斜静止的情况（只要保持倾斜角度不变，加速度就不变，视为静止）。
+  float diffX = std::abs(Accel.x - snapshotAccelX);
+  float diffY = std::abs(Accel.y - snapshotAccelY);
+  float diffZ = std::abs(Accel.z - snapshotAccelZ);
 
-  if (isMoving) {
+  if (diffX > STILL_TOLERANCE || diffY > STILL_TOLERANCE || diffZ > STILL_TOLERANCE) {
     lastMotionTime = millis();
+    snapshotAccelX = Accel.x;
+    snapshotAccelY = Accel.y;
+    snapshotAccelZ = Accel.z;
   }
 
   // 检查静止超时 -> 进入离线画廊模式
