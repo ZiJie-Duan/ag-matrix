@@ -1,0 +1,3 @@
+### Example Code from Waveshare
+### https://www.waveshare.com/wiki/ESP32-S3-LCD-1.3
+
