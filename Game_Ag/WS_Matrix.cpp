@@ -40,6 +40,21 @@ unsigned long touchStartTime = 0;               // 开始触碰的时间
 bool isTouching = false;                        // 是否正在触碰目标
 float touchBrightness = 0.0;                    // 触碰时的亮度增强 
 
+// 画廊传送门变量
+static bool portalActive = false;
+static uint8_t portalX = 3, portalY = 3;
+
+// 弹跳光点模式变量
+  struct BouncingParticle {
+    float x, y;
+    float vx, vy;
+    bool active;
+    uint8_t hue;
+    unsigned long nextJumpTime; // 每个粒子独立的跳跃时间
+  };
+  static BouncingParticle bouncingParticles[8];
+static int activeBouncingParticles = 1;
+
 void RGB_Matrix() {
   for (int row = 0; row < Matrix_Row; row++) {
     for (int col = 0; col < Matrix_Col; col++) {
@@ -152,6 +167,17 @@ void RGB_Matrix() {
         }  // 结束点收集游戏的 else if(ripple.active)
       }  // 结束点收集游戏的 if(miniGameEnabled)
       
+      // 画廊传送门渲染 (仅在非小游戏且非分裂模式且未绘制其他东西时)
+      if(!pixelDrawn && portalActive && !miniGameEnabled && !splitModeActive) {
+         if(row == portalX && col == portalY) {
+             // 绿色呼吸灯效果
+             float breath = (sin(millis() / 400.0) + 1.0) * 0.5; // 0-1
+             uint8_t g = (uint8_t)(20 + breath * 100);
+             pixels.setPixelColor(pixelIndex, pixels.Color(0, g, 0));
+             pixelDrawn = true;
+         }
+      }
+
       // 正常显示玩家光点或背景
       if(!pixelDrawn) {
         if(Matrix_Data[row][col] == 1) {
@@ -231,6 +257,9 @@ void Matrix_Init() {
   for(int i = 0; i < MAX_FIREWORK_PARTICLES; i++) {
     fireworkParticles[i].active = false;
   }
+  
+  // 初始化传送门
+  InitGalleryPortal();
 }
 
 // 触发分裂模式
@@ -627,5 +656,159 @@ void UpdateMiniGame() {
         ripple.active = false;
       }
     }
+  }
+}
+
+void InitGalleryPortal() {
+  // Random position in center area (2-5)
+  portalX = random(2, 6);
+  portalY = random(2, 6);
+  portalActive = true;
+}
+
+bool CheckGalleryPortal() {
+  if (!portalActive) InitGalleryPortal();
+  return (x == portalX && y == portalY);
+}
+
+void BouncingDotModeLoop() {
+  // Initialize one particle
+  activeBouncingParticles = 1;
+  for(int i=0; i<8; i++) {
+      bouncingParticles[i].active = false;
+      // 随机初始化每个粒子的下次跳跃时间
+      bouncingParticles[i].nextJumpTime = millis() + random(2000, 6000);
+  }
+  bouncingParticles[0].x = 3.5;
+  bouncingParticles[0].y = 3.5;
+  bouncingParticles[0].vx = (random(100)-50)/100.0;
+  bouncingParticles[0].vy = (random(100)-50)/100.0;
+  bouncingParticles[0].active = true;
+  bouncingParticles[0].hue = random(0, 256);
+  
+  unsigned long lastSplitTime = millis();
+  bool merging = false;
+  unsigned long mergeStartTime = 0;
+  
+  while(true) {
+    QMI8658_Loop();
+    
+    // Exit on significant movement (impact or tilt change)
+    float totalAccel = sqrt(Accel.x * Accel.x + Accel.y * Accel.y + (Accel.z + 1.0) * (Accel.z + 1.0));
+    if(totalAccel > 1.5) { 
+        pixels.clear();
+        pixels.show();
+        return; 
+    }
+    
+    unsigned long currentTime = millis();
+
+    // 物理更新和独立随机跳跃逻辑
+    for(int i=0; i<8; i++) {
+        if(!bouncingParticles[i].active) continue;
+        
+        // 独立跳跃检测
+        if(currentTime > bouncingParticles[i].nextJumpTime) {
+             // 力度 0.3 - 0.7
+             float jumpStrength = 0.3 + (random(40) / 100.0); 
+             
+             // 施加反重力方向的冲量 (反向跳跃: vx -= Accel.x, vy += Accel.y)
+             bouncingParticles[i].vx -= Accel.x * jumpStrength;
+             bouncingParticles[i].vy += Accel.y * jumpStrength;
+             
+             // 添加一点随机扰动
+             bouncingParticles[i].vx += (random(100)-50)/300.0;
+             bouncingParticles[i].vy += (random(100)-50)/300.0;
+             
+             // 设定下次跳跃时间
+             bouncingParticles[i].nextJumpTime = currentTime + random(2000, 6000);
+        }
+
+        // Gravity
+        bouncingParticles[i].vx += Accel.x * 0.05; 
+        bouncingParticles[i].vy -= Accel.y * 0.05;
+        
+        // Move
+        bouncingParticles[i].x += bouncingParticles[i].vx;
+        bouncingParticles[i].y += bouncingParticles[i].vy;
+        
+        // Bounce walls
+        if(bouncingParticles[i].x < 0) { bouncingParticles[i].x = 0; bouncingParticles[i].vx *= -0.8; }
+        if(bouncingParticles[i].x > 7) { bouncingParticles[i].x = 7; bouncingParticles[i].vx *= -0.8; }
+        if(bouncingParticles[i].y < 0) { bouncingParticles[i].y = 0; bouncingParticles[i].vy *= -0.8; }
+        if(bouncingParticles[i].y > 7) { bouncingParticles[i].y = 7; bouncingParticles[i].vy *= -0.8; }
+        
+        // Merge logic
+        if(merging) {
+             // Move towards center (average position) or first particle
+             // Let's move towards particle 0
+             if(i != 0 && bouncingParticles[0].active) {
+                 float dx = bouncingParticles[0].x - bouncingParticles[i].x;
+                 float dy = bouncingParticles[0].y - bouncingParticles[i].y;
+                 bouncingParticles[i].vx += dx * 0.05;
+                 bouncingParticles[i].vy += dy * 0.05;
+                 bouncingParticles[i].vx *= 0.9;
+                 bouncingParticles[i].vy *= 0.9;
+                 
+                 if(dx*dx + dy*dy < 0.2) {
+                     bouncingParticles[i].active = false;
+                     activeBouncingParticles--;
+                 }
+             }
+        }
+    }
+    
+    // Split Logic
+    if(!merging && millis() - lastSplitTime > 2000 && activeBouncingParticles < 8) {
+        // Split a random active particle
+        int splitIdx = -1;
+        for(int i=0; i<8; i++) {
+            if(bouncingParticles[i].active) { splitIdx = i; break; } // Just pick first active
+        }
+        
+        if(splitIdx != -1) {
+            // Find empty slot
+            int newIdx = -1;
+            for(int i=0; i<8; i++) { if(!bouncingParticles[i].active) { newIdx = i; break; } }
+            
+            if(newIdx != -1) {
+                bouncingParticles[newIdx] = bouncingParticles[splitIdx];
+                bouncingParticles[newIdx].vx += (random(100)-50)/200.0;
+                bouncingParticles[newIdx].vy += (random(100)-50)/200.0;
+                bouncingParticles[newIdx].hue = (bouncingParticles[splitIdx].hue + 30) % 256;
+                bouncingParticles[newIdx].active = true;
+                // 新分裂的粒子也设置一个随机跳跃时间
+                bouncingParticles[newIdx].nextJumpTime = millis() + random(2000, 6000);
+                activeBouncingParticles++;
+                lastSplitTime = millis();
+            }
+        }
+    }
+    
+    // Start merging eventually
+    if(!merging && activeBouncingParticles > 4 && millis() - lastSplitTime > 4000) {
+        merging = true;
+        mergeStartTime = millis();
+    }
+    
+    // Stop merging
+    if(merging && activeBouncingParticles <= 1) {
+        merging = false;
+        lastSplitTime = millis();
+    }
+    
+    // Render
+    pixels.clear();
+    for(int i=0; i<8; i++) {
+        if(bouncingParticles[i].active) {
+            int idx = (int)(bouncingParticles[i].x + 0.5) * 8 + (int)(bouncingParticles[i].y + 0.5);
+            if(idx >= 0 && idx < 64) {
+                 uint32_t color = pixels.ColorHSV(bouncingParticles[i].hue * 256, 255, 100);
+                 pixels.setPixelColor(idx, color);
+            }
+        }
+    }
+    pixels.show();
+    delay(20);
   }
 }

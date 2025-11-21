@@ -69,11 +69,12 @@ bool isSlotEmpty(const ArtworkSlot& slot) {
 }
 
 // 执行同步逻辑
-void performSync() {
+bool performSync() {
   WiFiClientSecure client;
   client.setInsecure(); // 忽略 SSL 证书验证
   HTTPClient http;
   
+  bool syncSuccess = false;
   int webVersion = 0;
   
   // 1. Get Sync Status
@@ -91,8 +92,8 @@ void performSync() {
 
   // 2. Get All Slots Data
   Serial.println("Downloading slots...");
-  pixels.fill(pixels.Color(0, 0, 50)); // 蓝色加载动画
-  pixels.show();
+  // pixels.fill(pixels.Color(0, 0, 50)); // 蓝色加载动画
+  // pixels.show();
 
   if (http.begin(client, String(API_BASE_URL) + "/slots")) {
     int httpCode = http.GET();
@@ -124,21 +125,28 @@ void performSync() {
           slotIdx++;
         }
         hasData = true;
-        pixels.fill(pixels.Color(0, 50, 0)); // 绿色成功
-        pixels.show();
+        syncSuccess = true;
+        // pixels.fill(pixels.Color(0, 50, 0)); // 绿色成功
+        // pixels.show();
         delay(500);
       } else {
         Serial.println("JSON parsing failed");
-        pixels.fill(pixels.Color(50, 0, 0)); // 红色失败
-        pixels.show();
+        // pixels.fill(pixels.Color(50, 0, 0)); // 红色失败
+        // pixels.show();
         delay(500);
       }
+    } else {
+      // http code not OK
+      syncSuccess = false;
     }
     http.end();
+  } else {
+    // http begin failed
+    syncSuccess = false;
   }
 
   // 3. Update Device Sync Version
-  if (hasData) {
+  if (hasData && syncSuccess) {
     Serial.println("Updating sync version...");
     if (http.begin(client, String(API_BASE_URL) + "/sync")) {
       http.addHeader("Content-Type", "application/json");
@@ -147,6 +155,8 @@ void performSync() {
       http.end();
     }
   }
+  
+  return syncSuccess;
 }
 
 void displayArtwork(int slotIndex) {
@@ -286,9 +296,15 @@ void ConnectToWifi() {
     pixels.clear();
     pixels.show();
 
-    performSync();
+    bool success = performSync();
     
-    BackendInteractionLoop();
+    if(success) {
+        BackendInteractionLoop();
+    } else {
+        Serial.println("Sync failed, returning to default mode.");
+        WiFi.disconnect();
+        return;
+    }
 
   } else {
     unsigned long failStartTime = millis();

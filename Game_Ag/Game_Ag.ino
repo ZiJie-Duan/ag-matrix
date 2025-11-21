@@ -119,8 +119,8 @@ void loop()
   // 检查静止超时 -> 进入离线画廊模式
   // 只有在没有 Z 轴手势进行中、没有分裂模式、小游戏启用(即默认状态)时才进入
   if (!zAxisRaised && !miniGameEnabled && (millis() - lastMotionTime > INACTIVITY_TIMEOUT)) {
-     // 进入离线画廊模式（阻塞循环，直到快速冲击退出）
-     OfflineGalleryLoop();
+     // 进入弹跳光点模式（新的静止模式）
+     BouncingDotModeLoop();
      // 退出后重置计时器
      lastMotionTime = millis();
   }
@@ -174,6 +174,13 @@ void loop()
     Game(X_EN,Y_EN);
     X_EN = 0;
     Y_EN = 0;
+
+    // Check for Gallery Portal Entry
+    if(CheckGalleryPortal()) {
+       OfflineGalleryLoop();
+       InitGalleryPortal(); // Respawn portal in new location
+       lastMotionTime = millis();
+    }
   }
   else {
     // 即使没有移动，也要刷新显示（为了小游戏）

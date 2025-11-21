@@ -81,4 +81,11 @@ void displayArtwork(int slotIndex);
 // 声明离线画廊模式循环
 void OfflineGalleryLoop();
 
+// 画廊传送门相关
+void InitGalleryPortal();
+bool CheckGalleryPortal(); // Use internal x,y coordinates
+
+// 弹跳光点模式（新的静止模式）
+void BouncingDotModeLoop();
+
 #endif
