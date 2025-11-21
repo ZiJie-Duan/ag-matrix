@@ -176,7 +176,7 @@ void loop()
     Y_EN = 0;
 
     // Check for Gallery Portal Entry
-    if(CheckGalleryPortal()) {
+    if(!miniGameEnabled && !IsSplitModeActive() && CheckGalleryPortal()) {
        OfflineGalleryLoop();
        InitGalleryPortal(); // Respawn portal in new location
        lastMotionTime = millis();

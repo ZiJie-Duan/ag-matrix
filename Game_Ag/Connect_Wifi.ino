@@ -276,7 +276,8 @@ void OfflineGalleryLoop() {
 
 void ConnectToWifi() {
   WiFi.mode(WIFI_STA);
-  WiFi.begin("Loading...", "9123456789");
+  //WiFi.begin("Loading...", "9123456789");
+  WiFi.begin("OPTUS_E07BBAM", "blimy79325qc");
 
   unsigned long startAttemptTime = millis();
   const unsigned long wifiTimeout = 10000;
